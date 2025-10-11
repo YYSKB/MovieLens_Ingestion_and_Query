@@ -5,14 +5,26 @@ import org.apache.hadoop.hbase.client.*;
 import org.apache.hadoop.hbase.util.Bytes;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 
 // 从 HBaseDataImporter 中静态导入连接对象和常量
 import static com.david.HBaseDataImporter.*;
 
 public class HBaseQueryer {
 
-    // --- 1. 查询需求 1: 查询电影详情 (Get) ---
-    public static void queryMovieDetail(String movieTitle) throws IOException {
+    // =======================================================================
+    //                       1. 查询需求 1: 电影详情 (Get)
+    // =======================================================================
+    /**
+     * 查询需求 1: 查询电影详情 (按名称)
+     * 使用 Get 操作在 movies_info 表中通过 Row Key (title) 进行精确查询。
+     * @param movieTitle 电影名称 (Row Key)
+     * @return 电影详情的 Map，如果未找到则返回 null。
+     */
+    public static Map<String, String> queryMovieDetail(String movieTitle) throws IOException {
         TableName tableName = TableName.valueOf(MOVIES_INFO_TABLE);
 
         try (Table table = connection.getTable(tableName)) {
@@ -23,40 +35,40 @@ public class HBaseQueryer {
             Result result = table.get(get);
 
             if (result.isEmpty()) {
-                System.out.println("❌ 查询失败：未找到电影 [" + movieTitle + "]");
-                return;
+                return null;
             }
 
-            String genres = Bytes.toString(result.getValue(Bytes.toBytes(INFO_CF), Bytes.toBytes("genres")));
-            String movieId = Bytes.toString(result.getValue(Bytes.toBytes(INFO_CF), Bytes.toBytes("movieId")));
+            // 封装结果：使用 LinkedHashMap 保持键值顺序
+            Map<String, String> details = new LinkedHashMap<>();
+            details.put("title", movieTitle);
+            details.put("movieId", Bytes.toString(result.getValue(Bytes.toBytes(INFO_CF), Bytes.toBytes("movieId"))));
+            details.put("genres", Bytes.toString(result.getValue(Bytes.toBytes(INFO_CF), Bytes.toBytes("genres"))));
 
-
-            System.out.println("\n===========================================");
-            System.out.println("✅ 查询 1 结果 - 电影详情:");
-            System.out.println("  Title (行键): " + movieTitle);
-            System.out.println("  Movie ID: " + movieId);
-            System.out.println("  Genres: " + genres);
-            System.out.println("===========================================");
+            return details;
 
         }
     }
 
-    // --- 2. 查询需求 2: 用户评分 (Scan + PrefixFilter) ---
-    public static void queryUserRatings(String userId) throws IOException {
+    // =======================================================================
+    //                       2. 查询需求 2: 用户评分 (Scan + PrefixFilter)
+    // =======================================================================
+    /**
+     * 查询需求 2: 查询某用户的所有评分记录 (按用户 ID)
+     * 使用 Scan 操作和 PrefixFilter 在 ratings_data 表中进行范围查询。
+     * @param userId 要查询的用户 ID
+     * @return 该用户的所有评分记录列表，每条记录是一个 Map。
+     */
+    public static List<Map<String, String>> queryUserRatings(String userId) throws IOException {
         TableName tableName = TableName.valueOf(RATINGS_DATA_TABLE);
+        List<Map<String, String>> ratingsList = new ArrayList<>();
 
         try (Table table = connection.getTable(tableName)) {
 
             Scan scan = new Scan();
-            // PrefixFilter 只返回 Row Key 以 userId_ 开头的行
             scan.setRowPrefixFilter(Bytes.toBytes(userId + "_"));
             scan.addFamily(Bytes.toBytes(SCORE_CF));
 
             ResultScanner scanner = table.getScanner(scan);
-
-            System.out.println("\n===========================================");
-            System.out.println("✅ 查询 2 结果 - 用户 [" + userId + "] 的所有评分:");
-            int count = 0;
 
             for (Result result : scanner) {
                 String rowKeyStr = Bytes.toString(result.getRow());
@@ -65,29 +77,35 @@ public class HBaseQueryer {
                 String rating = Bytes.toString(result.getValue(Bytes.toBytes(SCORE_CF), Bytes.toBytes("rating")));
                 String timestamp = Bytes.toString(result.getValue(Bytes.toBytes(SCORE_CF), Bytes.toBytes("timestamp")));
 
-                System.out.printf("  -> Movie ID: %s, Rating: %s, Timestamp: %s%n", movieId, rating, timestamp);
-                count++;
+                Map<String, String> record = new LinkedHashMap<>();
+                record.put("movieId", movieId);
+                record.put("rating", rating);
+                record.put("timestamp", timestamp);
+                record.put("userId", userId);
+
+                ratingsList.add(record);
             }
 
-            if (count == 0) {
-                System.out.println("❌ 未找到用户 [" + userId + "] 的任何评分记录。");
-            } else {
-                System.out.println("  总共找到 " + count + " 条记录。");
-            }
-            System.out.println("===========================================");
+            return ratingsList;
         }
     }
 
-    // --- 3. 查询需求 3: 电影所有评分 (间接查询) ---
-    public static void queryMovieRatingsByTitle(String movieTitle) throws IOException {
+    // =======================================================================
+    //                       3. 查询需求 3: 电影所有评分 (间接查询)
+    // =======================================================================
+
+    /**
+     * 查询需求 3: 查询某部电影的所有评分 (按电影名称)
+     * @param movieTitle 电影名称
+     * @return 该电影的所有评分记录列表，每条记录是一个 Map。
+     */
+    public static List<Map<String, String>> queryMovieRatingsByTitle(String movieTitle) throws IOException {
         // Step 1: 通过电影名称获取 MovieId
         String movieId = getMovieIdByTitle(movieTitle);
+        List<Map<String, String>> ratingsList = new ArrayList<>();
 
         if (movieId == null) {
-            System.out.println("\n===========================================");
-            System.out.println("❌ 查询 3 失败：未找到电影 [" + movieTitle + "] 的 ID。");
-            System.out.println("===========================================");
-            return;
+            return ratingsList; // 返回空列表
         }
 
         TableName tableName = TableName.valueOf(MOVIE_INDEX_TABLE);
@@ -95,15 +113,10 @@ public class HBaseQueryer {
         try (Table table = connection.getTable(tableName)) {
 
             Scan scan = new Scan();
-            // PrefixFilter 扫描 movie_ratings_index 表中所有以 movieId_ 开头的行
             scan.setRowPrefixFilter(Bytes.toBytes(movieId + "_"));
             scan.addFamily(Bytes.toBytes(REF_CF));
 
             ResultScanner scanner = table.getScanner(scan);
-
-            System.out.println("\n===========================================");
-            System.out.println("✅ 查询 3 结果 - 电影 [" + movieTitle + "] 获得的所有评分:");
-            int count = 0;
 
             for (Result result : scanner) {
                 String rowKeyStr = Bytes.toString(result.getRow());
@@ -112,21 +125,21 @@ public class HBaseQueryer {
                 String rating = Bytes.toString(result.getValue(Bytes.toBytes(REF_CF), Bytes.toBytes("rating")));
                 String timestamp = Bytes.toString(result.getValue(Bytes.toBytes(REF_CF), Bytes.toBytes("timestamp")));
 
-                System.out.printf("  -> User ID: %s, Rating: %s, Timestamp: %s%n", userId, rating, timestamp);
-                count++;
+                Map<String, String> record = new LinkedHashMap<>();
+                record.put("movieId", movieId);
+                record.put("userId", userId);
+                record.put("rating", rating);
+                record.put("timestamp", timestamp);
+
+                ratingsList.add(record);
             }
 
-            if (count == 0) {
-                System.out.println("❌ 电影 [" + movieTitle + "] 暂无评分记录。");
-            } else {
-                System.out.println("  总共找到 " + count + " 条记录。");
-            }
-            System.out.println("===========================================");
+            return ratingsList;
         }
     }
 
     /**
-     * 辅助方法：通过电影名称 (title) 在 movies_info 表中获取其 MovieId (用于查询 3)
+     * 辅助方法：通过电影名称 (title) 在 movies_info 表中获取其 MovieId
      */
     private static String getMovieIdByTitle(String movieTitle) throws IOException {
         TableName tableName = TableName.valueOf(MOVIES_INFO_TABLE);
@@ -141,22 +154,7 @@ public class HBaseQueryer {
         }
     }
 
-    // --- 主函数入口：执行查询操作测试 ---
-    public static void main(String[] args) {
-        try {
-            // 1. 初始化连接
-            initConnection();
-
-            // 2. 执行所有查询测试
-            queryMovieDetail("Toy Story (1995)");
-            queryUserRatings("1");
-            queryMovieRatingsByTitle("Toy Story (1995)");
-
-        } catch (IOException e) {
-            System.err.println("An I/O error occurred during query operation: " + e.getMessage());
-            e.printStackTrace();
-        } finally {
-            closeConnection();
-        }
-    }
+    // 注意：这里的 main 方法已失效，请运行 Spring Boot 的 Application 类来测试 Web 接口。
+    // 如果您想进行本地测试，请自行添加测试逻辑。
+    // public static void main(String[] args) { ... }
 }

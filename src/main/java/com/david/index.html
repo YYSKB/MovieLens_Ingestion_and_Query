@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HBase 电影评分数据查询系统 - 最终优化版</title>
+    <style>
+        /* ---------------------------------- */
+        /* 基础样式 */
+        /* ---------------------------------- */
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; background-color: #f4f7ff; color: #333; }
+        .container { max-width: 1000px; margin: auto; background: #fff; padding: 30px; border-radius: 0 0 12px 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+        h1 { color: #004085; text-align: center; margin-bottom: 30px; }
+        .query-section { margin-bottom: 30px; padding: 25px; border: 1px solid #cce5ff; border-radius: 8px; background-color: #e9f5ff; }
+        .query-section h3 { margin-top: 0; border-bottom: 3px solid #007bff; padding-bottom: 10px; color: #007bff; font-weight: 600; }
+        input[type="text"], button { padding: 10px 15px; margin-right: 10px; border: 1px solid #99c2ff; border-radius: 5px; font-size: 16px; }
+        .action-button { background-color: #28a745; color: white; border: none; cursor: pointer; transition: background-color 0.3s; font-weight: 500; }
+        .action-button:hover { background-color: #1e7e34; }
+        .error { color: #dc3545; font-weight: bold; }
+
+        /* ---------------------------------- */
+        /* 结果展示区域 */
+        /* ---------------------------------- */
+        .result-box { margin-top: 15px; padding: 0; border: 1px solid #ccc; border-radius: 5px; background-color: #fff; overflow: hidden; }
+        .result-header { background-color: #f8f9fa; padding: 10px; border-bottom: 1px solid #ccc; font-weight: bold; color: #555; }
+        .result-content { padding: 15px; overflow-x: auto; }
+
+        /* 表格样式 */
+        .data-table { width: 100%; border-collapse: collapse; margin-top: 0; font-size: 14px; }
+        .data-table th, .data-table td { border: 1px solid #ddd; padding: 10px; text-align: left; }
+        .data-table th { background-color: #007bff; color: white; position: sticky; top: 0; } /* 固定表头 */
+        .data-table tr:nth-child(even) { background-color: #f2f2f2; }
+        .data-table tr:hover { background-color: #e9ecef; }
+
+        /* ---------------------------------- */
+        /* 折叠/展开功能 */
+        /* ---------------------------------- */
+        .collapsible-wrapper {
+            /* 关键：为内容设置最大高度并启用滚动条 */
+            max-height: 400px; /* 默认显示高度 */
+            overflow-y: auto;
+            transition: max-height 0.5s ease-out;
+            border: 1px solid #ddd;
+        }
+
+        .collapsible-wrapper.collapsed {
+            max-height: 50px; /* 折叠后只显示一小部分 */
+        }
+
+        /* 浮动/固定折叠按钮 */
+        .floating-toggle {
+            position: sticky;
+            top: 0; /* 保持在视口顶部 */
+            z-index: 10;
+            text-align: center;
+            padding: 5px 0;
+            background-color: #f8f9fa;
+            border-bottom: 1px solid #ccc;
+        }
+
+        .toggle-btn {
+            background: none;
+            border: none;
+            color: #007bff;
+            font-size: 24px;
+            cursor: pointer;
+            line-height: 1;
+            padding: 0 10px;
+        }
+
+        /* 向上箭头 */
+        .toggle-btn.collapse-icon::after { content: "▲"; }
+        /* 向下箭头 */
+        .toggle-btn.expand-icon::after { content: "▼"; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>MovieLens HBase 数据查询系统 - 优化版</h1>
+
+    <div class="query-section">
+        <h3>1. 查询电影详情 (Get)</h3>
+        <label for="movieTitleInput">电影名称 (Row Key):</label>
+        <input type="text" id="movieTitleInput" value="Toy Story (1995)" placeholder="例如: Toy Story (1995)">
+        <button class="action-button" onclick="queryMovieDetail()">查询</button>
+        <div class="result-box">
+            <div class="result-header">电影详情结果:</div>
+            <div id="resultDetailTable" class="result-content"></div>
+        </div>
+    </div>
+
+    <div class="query-section">
+        <h3>2. 查询用户所有评分 (Scan)</h3>
+        <label for="userIdInput">用户 ID:</label>
+        <input type="text" id="userIdInput" value="1" placeholder="例如: 1">
+        <button class="action-button" onclick="queryUserRatings()">查询</button>
+
+        <div class="result-box">
+            <div class="result-header">用户评分记录:</div>
+            <div id="ratingsResultWrapper">
+                <div id="userRatingsFloatingToggle" class="floating-toggle hidden">
+                    <button id="userRatingsToggleButton" class="toggle-btn collapse-icon"
+                            onclick="toggleFolding('userRatingsCollapsible', 'userRatingsToggleButton')"></button>
+                </div>
+                <div id="userRatingsCollapsible" class="collapsible-wrapper">
+                    <div id="resultUserRatingsTable" class="result-content"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="query-section">
+        <h3>3. 查询某电影所有评分 (间接 Scan)</h3>
+        <label for="movieTitleRatingsInput">电影名称:</label>
+        <input type="text" id="movieTitleRatingsInput" value="Jumanji (1995)" placeholder="例如: Jumanji (1995)">
+        <button class="action-button" onclick="queryMovieAllRatings()">查询</button>
+
+        <div class="result-box">
+            <div class="result-header">电影所有评分记录:</div>
+            <div id="allRatingsResultWrapper">
+                <div id="allRatingsFloatingToggle" class="floating-toggle hidden">
+                    <button id="allRatingsToggleButton" class="toggle-btn collapse-icon"
+                            onclick="toggleFolding('allRatingsCollapsible', 'allRatingsToggleButton')"></button>
+                </div>
+                <div id="allRatingsCollapsible" class="collapsible-wrapper">
+                    <div id="resultAllRatingsTable" class="result-content"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<script>
+    const BASE_URL = 'http://localhost:8080/api/v1/movie';
+    const DEFAULT_VISIBLE_ROWS = 10; // 默认显示的行数 (对于查询 2 和 3)
+
+    /**
+     * 切换内容的折叠/展开状态
+     */
+    function toggleFolding(collapsibleId, buttonId) {
+        const collapsible = document.getElementById(collapsibleId);
+        const button = document.getElementById(buttonId);
+
+        const isCollapsed = collapsible.classList.toggle('collapsed');
+
+        // 切换按钮图标
+        if (isCollapsed) {
+            button.classList.remove('collapse-icon');
+            button.classList.add('expand-icon');
+        } else {
+            button.classList.remove('expand-icon');
+            button.classList.add('collapse-icon');
+        }
+    }
+
+    /**
+     * 将 JSON 数据渲染为 HTML 表格
+     * @param {Object[] | Object} data - 结果数据 (List<Map> 或 Map)
+     * @param {string} containerId - 渲染表格的容器 ID
+     * @param {boolean} isLargeData - 是否为大量数据 (查询 2 和 3)
+     */
+    function renderTable(data, containerId, isLargeData = false) {
+        const container = document.getElementById(containerId);
+        container.innerHTML = '';
+
+        if (!data || (Array.isArray(data) && data.length === 0)) {
+            container.innerHTML = '<p class="error">无数据或查询结果为空。</p>';
+            return;
+        }
+
+        let dataArray = Array.isArray(data) ? data : [data]; // 统一处理为数组
+
+        const keys = Object.keys(dataArray[0]);
+        let html = '<table class="data-table"><thead><tr>';
+
+        // 生成表头
+        keys.forEach(key => {
+            // 简单格式化 key
+            const formattedKey = key.charAt(0).toUpperCase() + key.slice(1).replace(/([A-Z])/g, ' $1');
+            html += `<th>${formattedKey}</th>`;
+        });
+        html += '</tr></thead><tbody>';
+
+        // 生成表行
+        dataArray.forEach((item, index) => {
+            // 对于大型数据，可以在这里限制渲染行数，但为了简单，我们使用 CSS max-height 实现“折叠”
+            html += '<tr>';
+            keys.forEach(key => {
+                html += `<td>${item[key]}</td>`;
+            });
+            html += '</tr>';
+        });
+
+        html += '</tbody></table>';
+        container.innerHTML = html;
+
+        // 处理大量数据折叠逻辑
+        if (isLargeData) {
+            const tableElement = container.querySelector('.data-table');
+            const toggleWrapper = container.closest('.result-box').querySelector('.floating-toggle');
+
+            if (dataArray.length > DEFAULT_VISIBLE_ROWS) {
+                // 如果结果超过默认行数，则显示折叠按钮，并让表格默认折叠（或保持展开）
+                toggleWrapper.classList.remove('hidden');
+
+                // 默认展开状态 (只滚动) 或 默认折叠状态 (需要设置 collapsed class)
+                const collapsibleId = container.closest('.collapsible-wrapper').id;
+                // 默认设置为展开 (只滚动)，如果需要默认折叠，请取消下一行的注释
+                // document.getElementById(collapsibleId).classList.add('collapsed');
+
+            } else {
+                toggleWrapper.classList.add('hidden');
+            }
+        }
+    }
+
+    /**
+     * 通用 Fetch 函数
+     */
+    async function fetchData(endpoint, tableContainerId, collapsibleId, toggleId, isLargeData = false) {
+        const container = document.getElementById(tableContainerId);
+        const toggleButton = toggleId ? document.getElementById(toggleId) : null;
+        const toggleWrapper = toggleButton ? toggleButton.closest('.floating-toggle') : null;
+
+        container.innerHTML = "正在查询中，请稍候...";
+        if (toggleWrapper) { toggleWrapper.classList.add('hidden'); }
+
+        try {
+            const response = await fetch(endpoint);
+            const data = await response.json();
+
+            if (response.ok) {
+                renderTable(data, tableContainerId, isLargeData);
+
+                // 确保结果区域默认是展开的 (如果之前是折叠状态)
+                if (collapsibleId) {
+                    document.getElementById(collapsibleId).classList.remove('collapsed');
+                    document.getElementById(toggleId).classList.remove('expand-icon');
+                    document.getElementById(toggleId).classList.add('collapse-icon');
+                }
+            } else {
+                const errorMsg = `查询失败! HTTP 状态码: ${response.status} - ${data.message || '未知错误'}`;
+                container.innerHTML = `<p class="error">${errorMsg}</p>`;
+            }
+        } catch (error) {
+            const errorMsg = `网络错误或服务器无响应: ${error.message}`;
+            container.innerHTML = `<p class="error">${errorMsg}</p>`;
+        }
+    }
+
+    // 接口 1: 查询电影详情 (Map -> 单行表格)
+    function queryMovieDetail() {
+        const title = document.getElementById('movieTitleInput').value.trim();
+        if (!title) { alert("请输入电影名称！"); return; }
+        const endpoint = `${BASE_URL}/detail?title=${encodeURIComponent(title)}`;
+        fetchData(endpoint, 'resultDetailTable', null, null, false);
+    }
+
+    // 接口 2: 查询用户评分 (List<Map> -> 表格 + 折叠)
+    function queryUserRatings() {
+        const userId = document.getElementById('userIdInput').value.trim();
+        if (!userId) { alert("请输入用户 ID！"); return; }
+        const endpoint = `${BASE_URL}/userRatings?userId=${encodeURIComponent(userId)}`;
+        fetchData(endpoint, 'resultUserRatingsTable', 'userRatingsCollapsible', 'userRatingsToggleButton', true);
+    }
+
+    // 接口 3: 查询某电影所有评分 (List<Map> -> 表格 + 折叠)
+    function queryMovieAllRatings() {
+        const title = document.getElementById('movieTitleRatingsInput').value.trim();
+        if (!title) { alert("请输入电影名称！"); return; }
+        const endpoint = `${BASE_URL}/allRatings?title=${encodeURIComponent(title)}`;
+        fetchData(endpoint, 'resultAllRatingsTable', 'allRatingsCollapsible', 'allRatingsToggleButton', true);
+    }
+</script>
+
+</body>
+</html>
