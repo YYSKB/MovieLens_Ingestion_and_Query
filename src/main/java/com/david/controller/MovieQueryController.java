@@ -1,5 +1,6 @@
-package com.david;
+package com.david.controller;
 
+import com.david.hbase.query.HBaseQueryer;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;

@@ -1,0 +1,14 @@
+1.启动hadoop
+/home/hadoop/hadoop-3.3.6/sbin/start-dfs.sh
+
+2.启动hbase
+/home/hadoop/hbase-2.5.7-hadoop3/bin/start-hbase.sh
+
+3.启动hbase shell
+/home/hadoop/hbase-2.5.7-hadoop3/bin/hbase shell
+
+4.一键启动
+./full-hbase-restart.sh
+
+5.一键停止
+./stop-hbase-hdfs.sh

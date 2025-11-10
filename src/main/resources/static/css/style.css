@@ -1,0 +1,155 @@
+/* ---------------------------------- */
+/* 基础样式 */
+/* ---------------------------------- */
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    margin: 0;
+    background-color: #f4f7ff;
+    color: #333;
+}
+.container {
+    max-width: 1000px;
+    margin: auto;
+    background: #fff;
+    padding: 30px;
+    border-radius: 0 0 12px 12px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+h1 {
+    color: #004085;
+    text-align: center;
+    margin-bottom: 30px;
+}
+.query-section {
+    margin-bottom: 30px;
+    padding: 25px;
+    border: 1px solid #cce5ff;
+    border-radius: 8px;
+    background-color: #e9f5ff;
+}
+.query-section h3 {
+    margin-top: 0;
+    border-bottom: 3px solid #007bff;
+    padding-bottom: 10px;
+    color: #007bff;
+    font-weight: 600;
+}
+input[type="text"], button {
+    padding: 10px 15px;
+    margin-right: 10px;
+    border: 1px solid #99c2ff;
+    border-radius: 5px;
+    font-size: 16px;
+}
+.action-button {
+    background-color: #28a745;
+    color: white;
+    border: none;
+    cursor: pointer;
+    transition: background-color 0.3s;
+    font-weight: 500;
+}
+.action-button:hover {
+    background-color: #1e7e34;
+}
+.error {
+    color: #dc3545;
+    font-weight: bold;
+}
+
+/* ---------------------------------- */
+/* 结果展示区域 */
+/* ---------------------------------- */
+.result-box {
+    margin-top: 15px;
+    padding: 0;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    background-color: #fff;
+    overflow: hidden;
+}
+.result-header {
+    background-color: #f8f9fa;
+    padding: 10px;
+    border-bottom: 1px solid #ccc;
+    font-weight: bold;
+    color: #555;
+}
+.result-content {
+    padding: 15px;
+    overflow-x: auto;
+}
+
+/* 表格样式 */
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 0;
+    font-size: 14px;
+}
+.data-table th, .data-table td {
+    border: 1px solid #ddd;
+    padding: 10px;
+    text-align: left;
+}
+.data-table th {
+    background-color: #007bff;
+    color: white;
+    position: sticky;
+    top: 0;
+} /* 固定表头 */
+.data-table tr:nth-child(even) {
+    background-color: #f2f2f2;
+}
+.data-table tr:hover {
+    background-color: #e9ecef;
+}
+
+/* ---------------------------------- */
+/* 折叠/展开功能 */
+/* ---------------------------------- */
+.collapsible-wrapper {
+    /* 关键：为内容设置最大高度并启用滚动条 */
+    max-height: 400px; /* 默认显示高度 */
+    overflow-y: auto;
+    transition: max-height 0.5s ease-out;
+    border: 1px solid #ddd;
+}
+
+.collapsible-wrapper.collapsed {
+    max-height: 50px; /* 折叠后只显示一小部分 */
+}
+
+/* 浮动/固定折叠按钮 */
+.floating-toggle {
+    position: sticky;
+    top: 0; /* 保持在视口顶部 */
+    z-index: 10;
+    text-align: center;
+    padding: 5px 0;
+    background-color: #f8f9fa;
+    border-bottom: 1px solid #ccc;
+}
+
+.toggle-btn {
+    background: none;
+    border: none;
+    color: #007bff;
+    font-size: 24px;
+    cursor: pointer;
+    line-height: 1;
+    padding: 0 10px;
+}
+
+/* 向上箭头 */
+.toggle-btn.collapse-icon::after {
+    content: "▲";
+}
+/* 向下箭头 */
+.toggle-btn.expand-icon::after {
+    content: "▼";
+}
+/* 补全.hidden类的样式 */
+.hidden {
+    display: none; /* 元素完全隐藏，不占据任何空间 */
+}
