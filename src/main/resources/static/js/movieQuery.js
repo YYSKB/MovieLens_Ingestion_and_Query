@@ -37,6 +37,26 @@ function renderTable(data, containerId, isLargeData = false) {
 
     let dataArray = Array.isArray(data) ? data : [data]; // 统一处理为数组
 
+    // 计算平均分（仅对查询2和3有效，使用原始样式）
+    let averageHtml = '';
+    if (isLargeData && dataArray.length > 0 && dataArray[0].hasOwnProperty('rating')) {
+        let totalRating = 0;
+        let validCount = 0;
+
+        // 累加评分
+        dataArray.forEach(item => {
+            const rating = parseFloat(item.rating);
+            if (!isNaN(rating)) {
+                totalRating += rating;
+                validCount++;
+            }
+        });
+
+        // 计算平均分并保留一位小数，使用原始文本样式（不新增样式类）
+        const average = validCount > 0 ? (totalRating / validCount).toFixed(1) : '0.0';
+        averageHtml = `<p style="font-weight: bold; margin-bottom: 10px;">平均分: ${average} (共${validCount}条评分)</p>`;
+    }
+
     const keys = Object.keys(dataArray[0]);
     let html = '<table class="data-table"><thead><tr>';
 
@@ -50,7 +70,6 @@ function renderTable(data, containerId, isLargeData = false) {
 
     // 生成表行
     dataArray.forEach((item, index) => {
-        // 对于大型数据，可以在这里限制渲染行数，但为了简单，我们使用 CSS max-height 实现“折叠”
         html += '<tr>';
         keys.forEach(key => {
             html += `<td>${item[key]}</td>`;
@@ -59,7 +78,9 @@ function renderTable(data, containerId, isLargeData = false) {
     });
 
     html += '</tbody></table>';
-    container.innerHTML = html;
+
+    // 拼接平均分和表格HTML（保持原始样式）
+    container.innerHTML = averageHtml + html;
 
     // 处理大量数据折叠逻辑
     if (isLargeData) {
@@ -67,14 +88,10 @@ function renderTable(data, containerId, isLargeData = false) {
         const toggleWrapper = container.closest('.result-box').querySelector('.floating-toggle');
 
         if (dataArray.length > DEFAULT_VISIBLE_ROWS) {
-            // 如果结果超过默认行数，则显示折叠按钮，并让表格默认折叠（或保持展开）
+            // 如果结果超过默认行数，则显示折叠按钮
             toggleWrapper.classList.remove('hidden');
 
-            // 默认展开状态 (只滚动) 或 默认折叠状态 (需要设置 collapsed class)
             const collapsibleId = container.closest('.collapsible-wrapper').id;
-            // 默认设置为展开 (只滚动)，如果需要默认折叠，请取消下一行的注释
-            // document.getElementById(collapsibleId).classList.add('collapsed');
-
         } else {
             toggleWrapper.classList.add('hidden');
         }
